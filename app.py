@@ -32,12 +32,12 @@ def save_data():
 
 # Page Config
 st.set_page_config(
-    page_title="선택 비율 공개 실험",
+    page_title="가짜 번호 제외하기 게임",
     page_icon="📊",
     layout="centered"
 )
 
-# Custom CSS - 라이트/다크 모드 어떤 설정이든 세련된 다크 테마로 완벽 강제 고정
+# Custom CSS - 라이트/다크 모드 및 st.form_submit_button 완벽 스타일링
 st.markdown("""
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -49,7 +49,7 @@ st.markdown("""
         font-family: 'Pretendard', sans-serif !important;
     }
 
-    /* 2. 상단 헤더 및 툴바 완전 제거/다크 처리 */
+    /* 2. 상단 헤더 및 툴바 투명화 */
     [data-testid="stHeader"], [data-testid="stToolbar"] {
         background-color: transparent !important;
         color: #F8FAFC !important;
@@ -64,7 +64,7 @@ st.markdown("""
         color: #F8FAFC !important;
     }
 
-    /* 4. 모든 텍스트/헤더 요소 흰색 선명하게 고정 (라이트 모드에서도 흑화 방지) */
+    /* 4. 모든 텍스트/헤더 요소 흰색 선명하게 고정 */
     h1, h2, h3, h4, h5, h6, p, span, div, label, .stMarkdown, .stCaption {
         color: #F8FAFC !important;
         word-break: keep-all !important;
@@ -122,10 +122,10 @@ st.markdown("""
         color: #F8FAFC !important;
     }
 
-    /* 8. 메인 버튼 스타일 지정 */
-    .stButton>button {
-        width: 100%;
-        height: 3.4em;
+    /* 8. 일반 버튼 및 Form 제출 버튼(로켓 버튼) 스타일 적용 */
+    .stButton>button, [data-testid="stFormSubmitButton"]>button {
+        width: 100% !important;
+        height: 3.4em !important;
         font-size: 16px !important;
         font-weight: 700 !important;
         border-radius: 12px !important;
@@ -135,12 +135,13 @@ st.markdown("""
         transition: all 0.3s ease !important;
         box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4) !important;
     }
-    .stButton>button:hover {
+    .stButton>button:hover, [data-testid="stFormSubmitButton"]>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6) !important;
     }
-    .stButton>button p, .stButton>button span {
+    .stButton>button *, [data-testid="stFormSubmitButton"]>button * {
         color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -232,8 +233,8 @@ elif menu == "🎮 참가자 실험 참여" and st.session_state.mode == "admin"
 # 0. 처음 화면 (규칙 설명 및 학번 입력)
 # ==========================================
 if st.session_state.mode == "home":
-    st.title("📊 선택 비율 공개 실험")
-    st.caption("확률과 통계 수행평가: 정보 노출에 따른 의사결정 실험")
+    st.title("📊 여러분의 감을 믿으십니까? 가짜 번호 제외하기 게임")
+    st.caption("확률과 통계 수행평가: 정보 제공은 확률의 변화로 이어질까?")
 
     st.markdown("""
         <div class="rule-card">
@@ -352,23 +353,23 @@ elif st.session_state.mode == "admin":
                     st.write(f"- **{k}**: {v}명 ({(v/total_p)*100:.1f}%)")
 
                 st.divider()
-                st.write("#### 📈 차수별 선택 집계")
+                st.write("#### 📈 차수별 선택 선지의 평균 선택 비율")
 
                 for stage in range(1, 5):
-                    denom = get_stage_denominator(stage)
-                    st.write(f"**[{stage}차]** 도달 참가자 수: **{denom}명**")
+                    valid_rates = []
+                    for p in st.session_state.participants:
+                        if len(p["logs"]) >= stage:
+                            rate_str = p["logs"][stage - 1]["displayed_rate_str"]
+                            # '%' 문자 제거 후 숫자로 변환
+                            match = re.search(r"([0-9]+(?:\.[0-9]+)?)%", rate_str)
+                            if match:
+                                valid_rates.append(float(match.group(1)))
                     
-                    if denom > 0:
-                        counts = {i: 0 for i in range(1, 6)}
-                        for p in st.session_state.participants:
-                            if len(p["logs"]) >= stage:
-                                counts[p["logs"][stage-1]["chosen_option"]] += 1
-                        
-                        for i in range(1, 6):
-                            rate = (counts[i] / denom) * 100
-                            st.write(f"- **{i}번**: {counts[i]}회 제외 ({rate:.1f}%)")
+                    if valid_rates:
+                        avg_rate = sum(valid_rates) / len(valid_rates)
+                        st.write(f"- **{stage}차**: **{avg_rate:.1f}%**인 선지 선택 (참가자 {len(valid_rates)}명 대상)")
                     else:
-                        st.info("해당 차수 데이터 없음")
+                        st.write(f"- **{stage}차**: 수집된 데이터 없음 (초기 참가자 또는 미도달)")
 
                 st.divider()
                 st.write("#### 📝 설문 조사 응답 집계")
