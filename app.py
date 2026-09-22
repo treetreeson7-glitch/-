@@ -190,26 +190,57 @@ def is_already_participated(sid):
             return True
     return False
 
-def get_stage_denominator(stage):
-    count = 0
-    for p in st.session_state.participants:
-        if len(p["logs"]) >= stage:
-            count += 1
-    return count
-
-def get_stage_choice_stats(stage):
-    denom = get_stage_denominator(stage)
-    if denom == 0:
-        return None, 0
+def calculate_conditional_stage_stats(stage, current_remaining_options):
+    """
+    현재 남아있는 선지(current_remaining_options)에 대해
+    1. 역대 해당 차수에서 각 선지가 포함되었을 때 실제 선택되었던 조건부 확률 계산
+    2. 그 확률들의 합으로 나누어 총합이 100%가 되도록 정규화
+    """
+    raw_probs = {}
     
-    counts = {i: 0 for i in range(1, 6)}
-    for p in st.session_state.participants:
-        if len(p["logs"]) >= stage:
-            chosen = p["logs"][stage - 1]["chosen_option"]
-            counts[chosen] += 1
-            
-    stats = {opt: (cnt / denom) * 100 for opt, cnt in counts.items()}
-    return stats, denom
+    for opt in current_remaining_options:
+        appeared_count = 0  # 역대 해당 차수에서 opt 선지가 후보에 등장한 횟수
+        chosen_count = 0    # 그 중 opt 선지가 실제 선택(제외)된 횟수
+        
+        for p in st.session_state.participants:
+            if len(p["logs"]) >= stage:
+                # stage - 1 차수까지 지워진 선지들
+                past_chosen = [log["chosen_option"] for log in p["logs"][:stage - 1]]
+                # 해당 참가자의 stage 차수 카드판에 남아있던 선지들
+                stage_options = [x for x in [1, 2, 3, 4, 5] if x not in past_chosen]
+                
+                if opt in stage_options:
+                    appeared_count += 1
+                    if p["logs"][stage - 1]["chosen_option"] == opt:
+                        chosen_count += 1
+        
+        if appeared_count > 0:
+            raw_probs[opt] = chosen_count / appeared_count
+        else:
+            raw_probs[opt] = None
+
+    # 모든 선지의 데이터가 없으면 데이터 없음 반환
+    valid_probs = {k: v for k, v in raw_probs.items() if v is not None}
+    if not valid_probs:
+        return {opt: "데이터 없음" for opt in current_remaining_options}
+
+    total_sum = sum(valid_probs.values())
+    
+    # 확률의 합이 0이면 균등 배분 처리
+    if total_sum == 0:
+        equal_rate = 100.0 / len(valid_probs)
+        return {opt: f"{equal_rate:.1f}%" if opt in valid_probs else "데이터 없음" for opt in current_remaining_options}
+
+    # 총합을 100%로 맞추기 위해 정규화 (100 / total_sum) 곱함
+    result_rates = {}
+    for opt in current_remaining_options:
+        if opt in valid_probs:
+            normalized_prob = (valid_probs[opt] / total_sum) * 100
+            result_rates[opt] = f"{normalized_prob:.1f}%"
+        else:
+            result_rates[opt] = "데이터 없음"
+
+    return result_rates
 
 def reset_current_participant():
     st.session_state.current_student_id = ""
@@ -360,7 +391,6 @@ elif st.session_state.mode == "admin":
                     for p in st.session_state.participants:
                         if len(p["logs"]) >= stage:
                             rate_str = p["logs"][stage - 1]["displayed_rate_str"]
-                            # '%' 문자 제거 후 숫자로 변환
                             match = re.search(r"([0-9]+(?:\.[0-9]+)?)%", rate_str)
                             if match:
                                 valid_rates.append(float(match.group(1)))
@@ -420,18 +450,14 @@ elif st.session_state.mode == "test":
     st.caption(f"참가자 학번: {st.session_state.current_student_id}")
     st.write("정답이 아니라고 판단되는 선지 **1개**를 선택하여 제외하세요.")
 
-    stats, denom = get_stage_choice_stats(stage)
-
-    if stats is None or denom == 0:
-        displayed_rates = {i: "데이터 없음" for i in range(1, 6)}
-    else:
-        displayed_rates = {i: f"{stats[i]:.1f}%" for i in range(1, 6)}
+    # 수정된 조건부 + 정규화 선택 비율 계산 함수 호출
+    displayed_rates = calculate_conditional_stage_stats(stage, st.session_state.remaining_options)
 
     st.divider()
 
     for opt in range(1, 6):
         if opt in st.session_state.remaining_options:
-            rate_text = displayed_rates[opt]
+            rate_text = displayed_rates.get(opt, "데이터 없음")
             
             with st.container():
                 col_info, col_btn = st.columns([3, 2])
@@ -447,7 +473,7 @@ elif st.session_state.mode == "test":
                         st.session_state.current_logs.append({
                             "stage": stage,
                             "chosen_option": opt,
-                            "displayed_rate_str": displayed_rates[opt]
+                            "displayed_rate_str": rate_text
                         })
 
                         if opt == st.session_state.correct_answer:
