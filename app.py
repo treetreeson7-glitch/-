@@ -101,6 +101,15 @@ st.markdown("""
     .rule-card h3, .rule-card p, .rule-card b {
         color: #F8FAFC !important;
     }
+    
+    .highlight-card {
+        background: rgba(99, 102, 241, 0.15) !important;
+        border: 1px solid rgba(139, 92, 246, 0.4) !important;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-top: 12px;
+        margin-bottom: 16px;
+    }
 
     /* 6. 입력창(Text Input) 라벨 및 본문 강제 고정 */
     [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] label {
@@ -191,22 +200,15 @@ def is_already_participated(sid):
     return False
 
 def calculate_conditional_stage_stats(stage, current_remaining_options):
-    """
-    현재 남아있는 선지(current_remaining_options)에 대해
-    1. 역대 해당 차수에서 각 선지가 포함되었을 때 실제 선택되었던 조건부 확률 계산
-    2. 그 확률들의 합으로 나누어 총합이 100%가 되도록 정규화
-    """
     raw_probs = {}
     
     for opt in current_remaining_options:
-        appeared_count = 0  # 역대 해당 차수에서 opt 선지가 후보에 등장한 횟수
-        chosen_count = 0    # 그 중 opt 선지가 실제 선택(제외)된 횟수
+        appeared_count = 0
+        chosen_count = 0
         
         for p in st.session_state.participants:
             if len(p["logs"]) >= stage:
-                # stage - 1 차수까지 지워진 선지들
                 past_chosen = [log["chosen_option"] for log in p["logs"][:stage - 1]]
-                # 해당 참가자의 stage 차수 카드판에 남아있던 선지들
                 stage_options = [x for x in [1, 2, 3, 4, 5] if x not in past_chosen]
                 
                 if opt in stage_options:
@@ -219,19 +221,16 @@ def calculate_conditional_stage_stats(stage, current_remaining_options):
         else:
             raw_probs[opt] = None
 
-    # 모든 선지의 데이터가 없으면 데이터 없음 반환
     valid_probs = {k: v for k, v in raw_probs.items() if v is not None}
     if not valid_probs:
         return {opt: "데이터 없음" for opt in current_remaining_options}
 
     total_sum = sum(valid_probs.values())
     
-    # 확률의 합이 0이면 균등 배분 처리
     if total_sum == 0:
         equal_rate = 100.0 / len(valid_probs)
         return {opt: f"{equal_rate:.1f}%" if opt in valid_probs else "데이터 없음" for opt in current_remaining_options}
 
-    # 총합을 100%로 맞추기 위해 정규화 (100 / total_sum) 곱함
     result_rates = {}
     for opt in current_remaining_options:
         if opt in valid_probs:
@@ -384,6 +383,22 @@ elif st.session_state.mode == "admin":
                     st.write(f"- **{k}**: {v}명 ({(v/total_p)*100:.1f}%)")
 
                 st.divider()
+                
+                # --- [추가] 5명 단위 누적 참가자 수별 최종 성공률 기록 ---
+                st.write("#### 🎯 누적 참가자 수별 최종 성공률 (5명 단위 추이)")
+                if total_p >= 5:
+                    milestone_html = "<div class='highlight-card'><b>📈 참가자 누적 수별 성공률 기록:</b><br/>"
+                    for count in range(5, total_p + 1, 5):
+                        sub_participants = st.session_state.participants[:count]
+                        success_count = sum(1 for p in sub_participants if p["result_summary"] == "최종 성공")
+                        success_rate = (success_count / count) * 100
+                        milestone_html += f"• <b>{count}명 달성 시점</b>: 누적 성공자 {success_count}명 → <b>{success_rate:.1f}%</b><br/>"
+                    milestone_html += "</div>"
+                    st.markdown(milestone_html, unsafe_allow_html=True)
+                else:
+                    st.info("참가자가 5명 이상 집계되면 5명 단위 누적 성공률 추이가 표시됩니다.")
+
+                st.divider()
                 st.write("#### 📈 차수별 선택 선지의 평균 선택 비율")
 
                 for stage in range(1, 5):
@@ -402,15 +417,37 @@ elif st.session_state.mode == "admin":
                         st.write(f"- **{stage}차**: 수집된 데이터 없음 (초기 참가자 또는 미도달)")
 
                 st.divider()
-                st.write("#### 📝 설문 조사 응답 집계")
-                survey_counts = {"도움이 되었다": 0, "잘 모르겠다": 0, "도움이 되지 않았다": 0}
-                for p in st.session_state.participants:
-                    ans = p.get("survey", "")
-                    if ans in survey_counts:
-                        survey_counts[ans] += 1
-
-                for q_ans, q_cnt in survey_counts.items():
-                    st.write(f"- **{q_ans}**: {q_cnt}명 ({(q_cnt/total_p)*100:.1f}%)")
+                st.write("#### 📝 설문 조사 응답 집계 (항목별 상세 결과)")
+                
+                survey_items = ["도움이 되었다", "잘 모르겠다", "도움이 되지 않았다"]
+                
+                for item in survey_items:
+                    # 해당 항목 응답자 추출
+                    item_participants = [p for p in st.session_state.participants if p.get("survey") == item]
+                    item_count = len(item_participants)
+                    item_pct = (item_count / total_p) * 100 if total_p > 0 else 0
+                    
+                    st.markdown(f"##### 🔹 **{item}**: {item_count}명 ({item_pct:.1f}%)")
+                    
+                    if item_count > 0:
+                        # 해당 응답 집단 내부 결과 분포
+                        item_outcomes = {"1차 탈락": 0, "2차 탈락": 0, "3차 탈락": 0, "4차 탈락": 0, "최종 성공": 0}
+                        for p in item_participants:
+                            res = p["result_summary"]
+                            if res == "최종 성공":
+                                item_outcomes["최종 성공"] += 1
+                            else:
+                                item_outcomes[f"{res[0]}차 탈락"] += 1
+                        
+                        out_str_list = []
+                        for stage_key in ["1차 탈락", "2차 탈락", "3차 탈락", "4차 탈락", "최종 성공"]:
+                            cnt = item_outcomes[stage_key]
+                            pct = (cnt / item_count) * 100
+                            out_str_list.append(f"{stage_key}: {cnt}명({pct:.1f}%)")
+                        
+                        st.caption("└ " + " | ".join(out_str_list))
+                    else:
+                        st.caption("└ 응답한 참가자가 없습니다.")
 
             else:
                 st.info("아직 누적된 실험 데이터가 없습니다.")
@@ -450,7 +487,6 @@ elif st.session_state.mode == "test":
     st.caption(f"참가자 학번: {st.session_state.current_student_id}")
     st.write("정답이 아니라고 판단되는 선지 **1개**를 선택하여 제외하세요.")
 
-    # 수정된 조건부 + 정규화 선택 비율 계산 함수 호출
     displayed_rates = calculate_conditional_stage_stats(stage, st.session_state.remaining_options)
 
     st.divider()
