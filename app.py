@@ -2,9 +2,14 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import re
 
 DATA_FILE = "data.json"
-ADMIN_PASSWORD = "1234"
+ADMIN_PASSWORD = "1234"  # 진행자 비밀번호
+
+# 허용되는 앞 3자리 및 뒤 2자리 정의
+VALID_CLASS_PREFIXES = {f"2{i:02d}" for i in range(1, 13)}  # '201' ~ '212'
+VALID_NUMBER_SUFFIXES = {f"{i:02d}" for i in range(1, 33)}   # '01' ~ '32'
 
 # --- 파일 데이터 불러오기/저장하기 ---
 def load_data():
@@ -25,43 +30,84 @@ def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# Page Config
 st.set_page_config(
     page_title="선택 비율 공개 실험",
     page_icon="📊",
     layout="centered"
 )
 
-# Custom CSS 적용
+# Custom CSS - 세련되고 현대적인 테마 (Modern Slate & Purple Dark UI)
 st.markdown("""
     <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    * { font-family: 'Pretendard', sans-serif; }
+    
+    .main {
+        background-color: #0F172A;
+    }
+    .stApp {
+        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
+        color: #F8FAFC;
+    }
     .status-badge {
-        background: linear-gradient(135deg, #3182CE 0%, #2B6CB0 100%);
-        color: white;
-        padding: 6px 18px;
-        border-radius: 30px;
-        font-weight: 700;
-        font-size: 0.9rem;
+        background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 100%);
+        color: #FFFFFF;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-weight: 800;
+        font-size: 0.85rem;
+        letter-spacing: 1px;
         display: inline-block;
-        margin-bottom: 15px;
+        margin-bottom: 12px;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
     .rule-card {
-        background: #F7FAFC;
-        border-radius: 12px;
-        padding: 20px;
-        border-left: 6px solid #3182CE;
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 24px;
+        border-left: 6px solid #8B5CF6;
         margin-bottom: 24px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    .rule-card h3 {
+        color: #F3F4F6 !important;
+        margin-bottom: 16px;
+    }
+    .rule-card p {
+        color: #CBD5E1 !important;
+        font-size: 0.95rem;
+        line-height: 1.6;
     }
     .stButton>button {
         width: 100%;
-        height: 3.2em;
+        height: 3.4em;
         font-size: 16px !important;
         font-weight: 700 !important;
+        border-radius: 12px !important;
+        background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%) !important;
+        color: white !important;
+        border: none !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4) !important;
+    }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6) !important;
+    }
+    .stTextInput input {
         border-radius: 10px !important;
+        background-color: #1E293B !important;
+        color: #F8FAFC !important;
+        border: 1px solid #475569 !important;
     }
     .stMarkdown, p, span { word-break: keep-all !important; white-space: normal !important; }
     </style>
 """, unsafe_allow_html=True)
 
+# Session State Initialization
 saved_answer, saved_participants = load_data()
 
 if "correct_answer" not in st.session_state:
@@ -72,6 +118,9 @@ if "participants" not in st.session_state:
 
 if "mode" not in st.session_state:
     st.session_state.mode = "home"
+
+if "current_student_id" not in st.session_state:
+    st.session_state.current_student_id = ""
 
 if "current_stage" not in st.session_state:
     st.session_state.current_stage = 1
@@ -89,6 +138,19 @@ if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 
 
+def validate_student_id(sid):
+    if len(sid) != 5 or not sid.isdigit():
+        return False
+    prefix = sid[:3]
+    suffix = sid[3:]
+    return (prefix in VALID_CLASS_PREFIXES) and (suffix in VALID_NUMBER_SUFFIXES)
+
+def is_already_participated(sid):
+    for p in st.session_state.participants:
+        if p.get("student_id") == sid:
+            return True
+    return False
+
 def get_stage_denominator(stage):
     count = 0
     for p in st.session_state.participants:
@@ -100,17 +162,18 @@ def get_stage_choice_stats(stage):
     denom = get_stage_denominator(stage)
     if denom == 0:
         return None, 0
-
+    
     counts = {i: 0 for i in range(1, 6)}
     for p in st.session_state.participants:
         if len(p["logs"]) >= stage:
             chosen = p["logs"][stage - 1]["chosen_option"]
             counts[chosen] += 1
-
+            
     stats = {opt: (cnt / denom) * 100 for opt, cnt in counts.items()}
     return stats, denom
 
 def reset_current_participant():
+    st.session_state.current_student_id = ""
     st.session_state.current_stage = 1
     st.session_state.remaining_options = [1, 2, 3, 4, 5]
     st.session_state.current_logs = []
@@ -118,7 +181,7 @@ def reset_current_participant():
 
 
 # --- 사이드바 메인 메뉴 ---
-st.sidebar.markdown("### 📌 메뉴")
+st.sidebar.markdown("### 📌 Navigation")
 menu = st.sidebar.radio("", ["🎮 참가자 실험 참여", "🔒 진행자 관리"])
 
 if menu == "🔒 진행자 관리":
@@ -127,7 +190,9 @@ elif menu == "🎮 참가자 실험 참여" and st.session_state.mode == "admin"
     st.session_state.mode = "home"
 
 
-# 0. 처음 화면
+# ==========================================
+# 0. 처음 화면 (규칙 설명 및 학번 입력)
+# ==========================================
 if st.session_state.mode == "home":
     st.title("📊 선택 비율 공개 실험")
     st.caption("확률과 통계 수행평가: 정보 노출에 따른 의사결정 실험")
@@ -142,19 +207,55 @@ if st.session_state.mode == "home":
         </div>
     """, unsafe_allow_html=True)
 
-    if st.button("🚀 실험 시작하기", type="primary"):
+    with st.form("student_id_form"):
+        st.subheader("👤 학번 입력")
+        sid_input = st.text_input(
+            "학번 5자리를 입력하세요 (예: 20725, 20718)",
+            placeholder="예: 20725",
+            max_chars=5
+        )
+        submit_sid = st.form_submit_button("🚀 실험 시작하기")
+
+        if submit_sid:
+            sid_clean = sid_input.strip()
+            if not validate_student_id(sid_clean):
+                st.error("⚠️ 올바른 학번 형식이 아닙니다. (예: 20725 — 2학년 1~12반, 1~32번 가능)")
+            elif is_already_participated(sid_clean):
+                st.session_state.current_student_id = sid_clean
+                st.session_state.mode = "already_participated"
+                st.rerun()
+            else:
+                reset_current_participant()
+                st.session_state.current_student_id = sid_clean
+                st.session_state.mode = "test"
+                st.rerun()
+
+
+# ==========================================
+# 중복 참여 제재 화면
+# ==========================================
+elif st.session_state.mode == "already_participated":
+    st.title("⚠️ 참여 제한 안내")
+    st.divider()
+    st.error("❌ 참여는 1회로 제한됩니다.")
+    st.info(f"입력하신 학번(**{st.session_state.current_student_id}**)은 이미 실험에 참여하였습니다.")
+    st.write("")
+    
+    if st.button("🔄 처음 화면으로 돌아가기", type="primary"):
         reset_current_participant()
-        st.session_state.mode = "test"
+        st.session_state.mode = "home"
         st.rerun()
 
 
+# ==========================================
 # 1. 진행자 관리 화면
+# ==========================================
 elif st.session_state.mode == "admin":
     st.title("🔒 진행자 관리 화면")
 
     if not st.session_state.admin_authenticated:
         st.info("진행자 전용 메뉴입니다. 인증 비밀번호를 입력해주세요.")
-
+        
         with st.form(key="admin_login_form"):
             input_pw = st.text_input("비밀번호 입력", type="password")
             submit_button = st.form_submit_button("🔓 인증하기", type="primary")
@@ -218,13 +319,13 @@ elif st.session_state.mode == "admin":
                 for stage in range(1, 5):
                     denom = get_stage_denominator(stage)
                     st.write(f"**[{stage}차]** 도달 참가자 수: **{denom}명**")
-
+                    
                     if denom > 0:
                         counts = {i: 0 for i in range(1, 6)}
                         for p in st.session_state.participants:
                             if len(p["logs"]) >= stage:
                                 counts[p["logs"][stage-1]["chosen_option"]] += 1
-
+                        
                         for i in range(1, 6):
                             rate = (counts[i] / denom) * 100
                             st.write(f"- **{i}번**: {counts[i]}회 제외 ({rate:.1f}%)")
@@ -248,7 +349,8 @@ elif st.session_state.mode == "admin":
         with tab2:
             if st.session_state.participants:
                 for p in st.session_state.participants:
-                    with st.expander(f"👤 참가자 #{p['id']} (결과: {p['result_summary']})"):
+                    sid_disp = p.get('student_id', '미기재')
+                    with st.expander(f"👤 학번 #{sid_disp} (결과: {p['result_summary']})"):
                         st.markdown(f"**설문 응답:** `{p.get('survey', '미응답')}`")
                         st.write("**차수별 선택 기록:**")
                         for log in p["logs"]:
@@ -269,11 +371,14 @@ elif st.session_state.mode == "admin":
                 st.rerun()
 
 
+# ==========================================
 # 2. 참가자 실험 화면
+# ==========================================
 elif st.session_state.mode == "test":
     stage = st.session_state.current_stage
     st.markdown(f"<div class='status-badge'>STAGE {stage} / 4</div>", unsafe_allow_html=True)
     st.title(f"{stage}차 — 제외할 선지 선택")
+    st.caption(f"참가자 학번: {st.session_state.current_student_id}")
     st.write("정답이 아니라고 판단되는 선지 **1개**를 선택하여 제외하세요.")
 
     stats, denom = get_stage_choice_stats(stage)
@@ -288,7 +393,7 @@ elif st.session_state.mode == "test":
     for opt in range(1, 6):
         if opt in st.session_state.remaining_options:
             rate_text = displayed_rates[opt]
-
+            
             with st.container():
                 col_info, col_btn = st.columns([3, 2])
                 with col_info:
@@ -297,7 +402,7 @@ elif st.session_state.mode == "test":
                         st.caption(f"이전 참가자 선택률: {rate_text}")
                     else:
                         st.markdown(f"이전 참가자 선택률: **{rate_text}**")
-
+                
                 with col_btn:
                     if st.button(f"❌ {opt}번 제외", key=f"btn_{stage}_{opt}"):
                         st.session_state.current_logs.append({
@@ -322,14 +427,16 @@ elif st.session_state.mode == "test":
             st.divider()
 
 
+# ==========================================
 # 3. 설문 조사 화면
+# ==========================================
 elif st.session_state.mode == "survey":
     st.title("📝 설문 조사")
     st.write("실험이 완료되었습니다! 간단한 설문에 응답해 주세요.")
     st.divider()
 
     st.subheader("선택 비율 정보가 선지를 제외하는 데 도움이 되었나요?")
-
+    
     survey_options = ["도움이 되었다", "잘 모르겠다", "도움이 되지 않았다"]
     survey_choice = st.radio(
         "",
@@ -343,6 +450,7 @@ elif st.session_state.mode == "survey":
         participant_id = len(st.session_state.participants) + 1
         new_record = {
             "id": participant_id,
+            "student_id": st.session_state.current_student_id,
             "result_summary": st.session_state.test_outcome,
             "logs": st.session_state.current_logs,
             "survey": survey_choice
@@ -353,7 +461,9 @@ elif st.session_state.mode == "survey":
         st.rerun()
 
 
+# ==========================================
 # 4. 최종 결과 화면
+# ==========================================
 elif st.session_state.mode == "result":
     st.title("🎉 실험 결과")
     st.divider()
@@ -370,6 +480,7 @@ elif st.session_state.mode == "result":
         st.write(f"- **{log['stage']}차 제외 선지**: {log['chosen_option']}번 (당시 확인한 선택률: **{log['displayed_rate_str']}**)")
 
     p_last = st.session_state.participants[-1]
+    st.write(f"**학번:** `{p_last.get('student_id', '미기재')}`")
     st.write(f"**설문 응답:** `{p_last['survey']}`")
 
     st.divider()
