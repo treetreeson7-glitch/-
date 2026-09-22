@@ -37,22 +37,48 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom CSS - 세련되고 현대적인 테마 (Modern Slate & Purple Dark UI)
+# Custom CSS - 라이트/다크 모드 어떤 설정이든 세련된 다크 테마로 완벽 강제 고정
 st.markdown("""
     <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    * { font-family: 'Pretendard', sans-serif; }
     
-    .main {
-        background-color: #0F172A;
+    /* 1. 전체 앱 기본 배경 및 폰트 고정 */
+    html, body, [data-testid="stAppViewContainer"], .main, .stApp {
+        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%) !important;
+        color: #F8FAFC !important;
+        font-family: 'Pretendard', sans-serif !important;
     }
-    .stApp {
-        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 100%);
-        color: #F8FAFC;
+
+    /* 2. 상단 헤더 및 툴바 완전 제거/다크 처리 */
+    [data-testid="stHeader"], [data-testid="stToolbar"] {
+        background-color: transparent !important;
+        color: #F8FAFC !important;
     }
+
+    /* 3. 사이드바 배경 및 내부 텍스트 완벽 고정 */
+    [data-testid="stSidebar"], [data-testid="stSidebarContent"] {
+        background-color: #0F172A !important;
+        color: #F8FAFC !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #F8FAFC !important;
+    }
+
+    /* 4. 모든 텍스트/헤더 요소 흰색 선명하게 고정 (라이트 모드에서도 흑화 방지) */
+    h1, h2, h3, h4, h5, h6, p, span, div, label, .stMarkdown, .stCaption {
+        color: #F8FAFC !important;
+        word-break: keep-all !important;
+        white-space: normal !important;
+    }
+    
+    .stCaption, caption {
+        color: #94A3B8 !important;
+    }
+
+    /* 5. 카드 및 뱃지 디자인 */
     .status-badge {
         background: linear-gradient(90deg, #6366F1 0%, #8B5CF6 100%);
-        color: #FFFFFF;
+        color: #FFFFFF !important;
         padding: 6px 16px;
         border-radius: 20px;
         font-weight: 800;
@@ -63,24 +89,40 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
     .rule-card {
-        background: rgba(30, 41, 59, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
         backdrop-filter: blur(10px);
         border-radius: 16px;
         padding: 24px;
-        border-left: 6px solid #8B5CF6;
+        border-left: 6px solid #8B5CF6 !important;
         margin-bottom: 24px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
     }
-    .rule-card h3 {
-        color: #F3F4F6 !important;
-        margin-bottom: 16px;
+    .rule-card h3, .rule-card p, .rule-card b {
+        color: #F8FAFC !important;
     }
-    .rule-card p {
-        color: #CBD5E1 !important;
-        font-size: 0.95rem;
-        line-height: 1.6;
+
+    /* 6. 입력창(Text Input) 라벨 및 본문 강제 고정 */
+    [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] label {
+        color: #F8FAFC !important;
+        font-weight: 600 !important;
     }
+    .stTextInput input {
+        background-color: #1E293B !important;
+        color: #FFFFFF !important;
+        border: 1px solid #64748B !important;
+        border-radius: 10px !important;
+    }
+    .stTextInput input::placeholder {
+        color: #94A3B8 !important;
+    }
+
+    /* 7. 라디오/선택 버튼 글자색 고정 */
+    [data-testid="stRadioButton"] label p {
+        color: #F8FAFC !important;
+    }
+
+    /* 8. 메인 버튼 스타일 지정 */
     .stButton>button {
         width: 100%;
         height: 3.4em;
@@ -88,7 +130,7 @@ st.markdown("""
         font-weight: 700 !important;
         border-radius: 12px !important;
         background: linear-gradient(90deg, #4F46E5 0%, #7C3AED 100%) !important;
-        color: white !important;
+        color: #FFFFFF !important;
         border: none !important;
         transition: all 0.3s ease !important;
         box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4) !important;
@@ -97,13 +139,9 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6) !important;
     }
-    .stTextInput input {
-        border-radius: 10px !important;
-        background-color: #1E293B !important;
-        color: #F8FAFC !important;
-        border: 1px solid #475569 !important;
+    .stButton>button p, .stButton>button span {
+        color: #FFFFFF !important;
     }
-    .stMarkdown, p, span { word-break: keep-all !important; white-space: normal !important; }
     </style>
 """, unsafe_allow_html=True)
 
