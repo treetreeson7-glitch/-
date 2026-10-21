@@ -5,7 +5,7 @@ import os
 import re
 
 DATA_FILE = "data.json"
-ADMIN_PASSWORD = "1234"  # 진행자 비밀번호
+ADMIN_PASSWORD = "0609"  # 진행자 비밀번호 변경 완료
 
 # 허용되는 앞 3자리 및 뒤 2자리 정의
 VALID_CLASS_PREFIXES = {f"2{i:02d}" for i in range(1, 13)}  # '201' ~ '212'
@@ -32,7 +32,7 @@ def save_data():
 
 # Page Config
 st.set_page_config(
-    page_title="가짜 번호 제외하기 게임",
+    page_title="정답 선지만 남겨라",
     page_icon="📊",
     layout="centered"
 )
@@ -131,7 +131,7 @@ st.markdown("""
         color: #F8FAFC !important;
     }
 
-    /* 8. 일반 버튼 및 Form 제출 버튼(로켓 버튼) 스타일 적용 */
+    /* 8. 일반 버튼 및 Form 제출 버튼 스타일 적용 */
     .stButton>button, [data-testid="stFormSubmitButton"]>button {
         width: 100% !important;
         height: 3.4em !important;
@@ -263,7 +263,7 @@ elif menu == "🎮 참가자 실험 참여" and st.session_state.mode == "admin"
 # 0. 처음 화면 (규칙 설명 및 학번 입력)
 # ==========================================
 if st.session_state.mode == "home":
-    st.title("📊 여러분의 감을 믿으십니까? 가짜 번호 제외하기 게임")
+    st.title("📊 정답 선지만 남겨라")
     st.caption("확률과 통계 수행평가: 정보 제공은 확률의 변화로 이어질까?")
 
     st.markdown("""
@@ -384,7 +384,6 @@ elif st.session_state.mode == "admin":
 
                 st.divider()
                 
-                # --- [추가] 5명 단위 누적 참가자 수별 최종 성공률 기록 ---
                 st.write("#### 🎯 누적 참가자 수별 최종 성공률 (5명 단위 추이)")
                 if total_p >= 5:
                     milestone_html = "<div class='highlight-card'><b>📈 참가자 누적 수별 성공률 기록:</b><br/>"
@@ -422,7 +421,6 @@ elif st.session_state.mode == "admin":
                 survey_items = ["도움이 되었다", "잘 모르겠다", "도움이 되지 않았다"]
                 
                 for item in survey_items:
-                    # 해당 항목 응답자 추출
                     item_participants = [p for p in st.session_state.participants if p.get("survey") == item]
                     item_count = len(item_participants)
                     item_pct = (item_count / total_p) * 100 if total_p > 0 else 0
@@ -430,7 +428,6 @@ elif st.session_state.mode == "admin":
                     st.markdown(f"##### 🔹 **{item}**: {item_count}명 ({item_pct:.1f}%)")
                     
                     if item_count > 0:
-                        # 해당 응답 집단 내부 결과 분포
                         item_outcomes = {"1차 탈락": 0, "2차 탈락": 0, "3차 탈락": 0, "4차 탈락": 0, "최종 성공": 0}
                         for p in item_participants:
                             res = p["result_summary"]
