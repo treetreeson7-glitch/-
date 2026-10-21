@@ -8,7 +8,7 @@ DATA_FILE = "data.json"
 ADMIN_PASSWORD = "0609"  # 진행자 비밀번호 변경 완료
 
 # 허용되는 앞 3자리 및 뒤 2자리 정의
-VALID_CLASS_PREFIXES = {f"2{i:02d}" for i in range(1, 13)}  # '201' ~ '212'
+VALID_CLASS_PREFIXES = {f"2{i:02d}" for i in range(1, 14)}  # '201' ~ '213'
 VALID_NUMBER_SUFFIXES = {f"{i:02d}" for i in range(1, 33)}   # '01' ~ '32'
 
 # --- 파일 데이터 불러오기/저장하기 ---
